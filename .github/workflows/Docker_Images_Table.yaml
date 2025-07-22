@@ -22,8 +22,8 @@ jobs:
 
     - name: Generate GHCR images report
       env:
-        GHCR_ORG: "Netcracker" 
-        REPO_NAME: "qubership-apihub-backend"  
+        GHCR_ORG: "Netcracker"
+        REPO_NAME: "qubership-apihub-backend"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         python - <<"EOF"
@@ -33,42 +33,36 @@ jobs:
         from github import Github
         from urllib.parse import quote
 
-        
         org = os.getenv('GHCR_ORG')
         repo_name = os.getenv('REPO_NAME')
         gh_token = os.getenv('GITHUB_TOKEN')
         output_file = 'GHCR_IMAGES_REPORT.md'
         api_url = "https://api.github.com"
 
-        
         def escape_md(text):
             return str(text).replace("|", "\|").replace("`", "\`").replace("*", "\*")
 
-        
         headers = {
-            "Authorization": f"Bearer {gh_token}",
+            "Authorization": f"token {gh_token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        
-        
-        url = f"{api_url}/orgs/{org}/packages?package_type=container"
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        packages = response.json()
+
         image_data = []
-        
-        
-        target_package = next((p for p in packages if p['name'].lower() == repo_name.lower()), None)
-        
-        if target_package:
-            versions_url = f"{api_url}/orgs/{org}/packages/container/{target_package['name']}/versions"
+        try:
+            package_name = quote(repo_name.lower())
+            url = f"{api_url}/orgs/{org}/packages/container/{package_name}"
+            
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            
+            versions_url = f"{url}/versions"
             versions_response = requests.get(versions_url, headers=headers)
             versions_response.raise_for_status()
             
             for version in versions_response.json():
-                if version['metadata']['container']['tags']:
-                    for tag in version['metadata']['container']['tags']:
+                tags = version.get('metadata', {}).get('container', {}).get('tags', [])
+                if tags:
+                    for tag in tags:
                         image_data.append({
                             'tag': tag,
                             'image': f"ghcr.io/{org}/{repo_name}:{tag}",
@@ -76,8 +70,12 @@ jobs:
                             'digest': version['name'][:12],
                             'size': f"{round(version['size_bytes'] / (1024**2), 2)} MB"
                         })
+        except requests.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"Package {repo_name} not found in GHCR")
+            else:
+                print(f"API Error: {e}")
 
-        
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write("# GHCR Docker Images Report\n\n")
             f.write(f"Repository: ghcr.io/{org}/{repo_name}\n")
