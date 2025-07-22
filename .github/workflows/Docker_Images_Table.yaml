@@ -106,14 +106,20 @@ jobs:
 
         
         try:
-            with open(output_file, 'w') as f:
+            with open(output_file, 'w', encoding='utf-8') as f:
                 f.write("# Docker Images Table\n\n")
-                f.write(f"*Generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
                 f.write("| Branch | Image Name | Last Updated |\n")
                 f.write("|--------|------------|--------------|\n")
                 for item in image_data:
-                    f.write(f"| {item['branch']} | `{item['image_name']}` | {item['last_updated']} |\n")
-            
+                    
+                    branch = item.get('branch', 'N/A')
+                    image = item.get('image_name', 'N/A')
+                    updated = item.get('last_updated', 'N/A')
+                    
+                    
+                    safe_image = str(image).replace('`', '\`').replace('|', '\|')
+                    f.write(f"| {branch} | `{safe_image}` | {updated} |\n")
+                    
             print(f"\nSuccessfully generated table in {output_file}")
             print("Final table contents:")
             print("="*50)
