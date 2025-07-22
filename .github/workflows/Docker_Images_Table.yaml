@@ -20,116 +20,75 @@ jobs:
         python -m pip install --upgrade pip
         pip install PyGithub requests
 
-    - name: Generate Docker images table
+    - name: Generate GHCR images report
       env:
-        SOURCE_REPO: "Netcracker/qubership-apihub-backend" 
+        GHCR_REPO: "Netcracker/qubership-apihub-backend" 
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         python - <<"EOF"
         import os
-        from github import Github
+        import requests
+        import json
         from datetime import datetime
+        from github import Github
+        from urllib.parse import quote
 
-       
-        source_repo = os.getenv('SOURCE_REPO')
+        
+        repo_name = os.getenv('GHCR_REPO')
         gh_token = os.getenv('GITHUB_TOKEN')
-        output_file = 'DOCKER_IMAGES_TABLE.md'
+        output_file = 'GHCR_IMAGES_REPORT.md'
+        api_url = "https://api.github.com"
 
         
-        def init_github():
-            if gh_token:
-                g = Github(gh_token)
-                print("Using authenticated GitHub client")
-            else:
-                g = Github()
-                print("Using anonymous GitHub client")
-            return g
-
-        g = init_github()
-        
-       
-        def check_rate_limit():
-            rate_limit = g.get_rate_limit()
-            remaining = rate_limit.core.remaining
-            reset_time = rate_limit.core.reset
-            print(f"API calls remaining: {remaining}")
-            print(f"Limit resets at: {reset_time}")
-            return remaining
-
-        remaining_calls = check_rate_limit()
+        def escape_md(text):
+            return str(text).replace("|", "\|").replace("`", "\`").replace("*", "\*")
 
         
-        try:
-            repo = g.get_repo(source_repo)
-            branches = repo.get_branches()
-            print(f"Found {branches.totalCount} branches in {source_repo}")
-        except Exception as e:
-            print(f"Error accessing repository: {e}")
-            exit(1)
+        gh = Github(gh_token)
+        repo = gh.get_repo(repo_name)
+        branches = [b.name for b in repo.get_branches()]
 
+        
+        headers = {
+            "Authorization": f"Bearer {gh_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
         
         image_data = []
         for branch in branches:
-            branch_name = branch.name
-            print(f"\nProcessing branch: {branch_name}")
+            image_name = f"{repo_name.split('/')[-1]}:{branch}"
+            encoded_name = quote(f"ghcr.io/{repo_name.split('/')[0]}/{image_name}", safe='')
             
             try:
+                url = f"{api_url}/users/packages/container/{encoded_name}/versions"
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
                 
-                try:
-                    dockerfile = repo.get_contents("Dockerfile", ref=branch_name)
-                    print(f"Found Dockerfile in {branch_name}")
-                except Exception as e:
-                    print(f"Dockerfile not found in {branch_name}: {e}")
-                    continue
-                
-                
-                image_name = f"ghcr.io/{source_repo}:{branch_name}"
-                last_updated = branch.commit.commit.last_modified
-                
-                image_data.append({
-                    'branch': branch_name,
-                    'image_name': image_name,
-                    'last_updated': last_updated
-                })
-                
-                print(f"Added image: {image_name} (updated: {last_updated})")
-                
-               
-                if len(image_data) % 10 == 0:
-                    remaining_calls = check_rate_limit()
-                    if remaining_calls < 50:
-                        print("Warning: Low API calls remaining!")
-                        
+                versions = response.json()
+                for version in versions:
+                    if version['metadata']['container']['tags']:
+                        image_data.append({
+                            'branch': branch,
+                            'image': f"ghcr.io/{repo_name}:{branch}",
+                            'created': version['created_at'],
+                            'digest': version['name'][:12],
+                            'size': f"{round(version['size_bytes'] / (1024**2), 2)} MB"
+                        })
             except Exception as e:
-                print(f"Error processing branch {branch_name}: {e}")
-                continue
+                print(f"Error processing {image_name}: {e}")
 
-        
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write("# Docker Images Table\n\n")
-                f.write("| Branch | Image Name | Last Updated |\n")
-                f.write("|--------|------------|--------------|\n")
-                for item in image_data:
-                    branch = item.get('branch', 'N/A')
-                    image = item.get('image_name', 'N/A')
-                    updated = item.get('last_updated', 'N/A')
-                    
-                    safe_image = str(image).replace('`', '\\`').replace('|', '\\|')
-                    f.write(f"| {branch} | `{safe_image}` | {updated} |\n")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write("# GHCR Docker Images Report\n\n")
+            f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
+            f.write("| Branch | Image | Created | Digest | Size |\n")
+            f.write("|--------|-------|---------|--------|------|\n")
             
-            print(f"\nSuccessfully generated table in {output_file}")
-            print("Final table contents:")
-            print("="*50)
-            with open(output_file, 'r') as f:
-                print(f.read())
-            print("="*50)
-            
-        except Exception as e:
-            print(f"Error generating table: {e}")
-            exit(1)
-    
-        check_rate_limit()
+            for item in sorted(image_data, key=lambda x: x['created'], reverse=True):
+                f.write(f"| {escape_md(item['branch'])} | `{escape_md(item['image'])}` | ")
+                f.write(f"{escape_md(item['created'])} | `{escape_md(item['digest'])}` | ")
+                f.write(f"{escape_md(item['size'])} |\n")
+
+        print(f"Report generated: {output_file}")
         EOF
         echo "Generated table:"
         cat DOCKER_IMAGES_TABLE.md
