@@ -1,0 +1,45 @@
+name: Docker Images Table Generator
+
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-table:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install PyGithub requests
+
+    - name: Generate Docker images table
+      env:
+        SOURCE_REPO: "Netcracker/qubership-apihub-backend" 
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python - <<EOF
+        import os
+        from github import Github
+    
+        token = os.getenv('GITHUB_TOKEN')
+        repo_name = os.getenv('SOURCE_REPO')
+    
+        
+        g = Github(token) if token else Github() 
+        repo = g.get_repo(repo_name)
+    
+        print(f"Repository: {repo.full_name}")
+        print(f"Description: {repo.description}")
+        print("\nBranches:")
+        for branch in repo.get_branches():
+            print(f"- {branch.name}")
+        EOF
