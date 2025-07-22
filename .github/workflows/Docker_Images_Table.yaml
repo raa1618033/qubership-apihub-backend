@@ -111,11 +111,9 @@ jobs:
                 f.write("| Branch | Image Name | Last Updated |\n")
                 f.write("|--------|------------|--------------|\n")
                 for item in image_data:
-                    
                     branch = item.get('branch', 'N/A')
                     image = item.get('image_name', 'N/A')
                     updated = item.get('last_updated', 'N/A')
-                    
                     
                     safe_image = str(image).replace('`', '\`').replace('|', '\|')
                     f.write(f"| {branch} | `{safe_image}` | {updated} |\n")
