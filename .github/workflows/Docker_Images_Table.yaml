@@ -25,7 +25,7 @@ jobs:
         SOURCE_REPO: "Netcracker/qubership-apihub-backend" 
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        python - <<EOF
+        python - <<"EOF"
         import os
         from github import Github
         from datetime import datetime
@@ -115,9 +115,10 @@ jobs:
                     image = item.get('image_name', 'N/A')
                     updated = item.get('last_updated', 'N/A')
                     
-                    safe_image = str(image).replace('`', '\`').replace('|', '\|')
+                    # Экранирование обратных кавычек для Markdown
+                    safe_image = str(image).replace('`', '\\`').replace('|', '\\|')
                     f.write(f"| {branch} | `{safe_image}` | {updated} |\n")
-                    
+            
             print(f"\nSuccessfully generated table in {output_file}")
             print("Final table contents:")
             print("="*50)
@@ -128,8 +129,7 @@ jobs:
         except Exception as e:
             print(f"Error generating table: {e}")
             exit(1)
-
-       
+    
         check_rate_limit()
         EOF
         echo "Generated table:"
