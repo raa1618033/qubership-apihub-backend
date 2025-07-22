@@ -22,19 +22,20 @@ jobs:
 
     - name: Generate GHCR images report
       env:
-        GHCR_REPO: "Netcracker/qubership-apihub-backend" 
+        GHCR_ORG: "Netcracker" 
+        REPO_NAME: "qubership-apihub-backend"  
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         python - <<"EOF"
         import os
         import requests
-        import json
         from datetime import datetime
         from github import Github
         from urllib.parse import quote
 
         
-        repo_name = os.getenv('GHCR_REPO')
+        org = os.getenv('GHCR_ORG')
+        repo_name = os.getenv('REPO_NAME')
         gh_token = os.getenv('GITHUB_TOKEN')
         output_file = 'GHCR_IMAGES_REPORT.md'
         api_url = "https://api.github.com"
@@ -44,49 +45,54 @@ jobs:
             return str(text).replace("|", "\|").replace("`", "\`").replace("*", "\*")
 
         
-        gh = Github(gh_token)
-        repo = gh.get_repo(repo_name)
-        branches = [b.name for b in repo.get_branches()]
-
-        
         headers = {
             "Authorization": f"Bearer {gh_token}",
             "Accept": "application/vnd.github.v3+json"
         }
         
+        
+        url = f"{api_url}/orgs/{org}/packages?package_type=container"
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        packages = response.json()
         image_data = []
-        for branch in branches:
-            image_name = f"{repo_name.split('/')[-1]}:{branch}"
-            encoded_name = quote(f"ghcr.io/{repo_name.split('/')[0]}/{image_name}", safe='')
+        
+        
+        target_package = next((p for p in packages if p['name'].lower() == repo_name.lower()), None)
+        
+        if target_package:
+            versions_url = f"{api_url}/orgs/{org}/packages/container/{target_package['name']}/versions"
+            versions_response = requests.get(versions_url, headers=headers)
+            versions_response.raise_for_status()
             
-            try:
-                url = f"{api_url}/users/packages/container/{encoded_name}/versions"
-                response = requests.get(url, headers=headers)
-                response.raise_for_status()
-                
-                versions = response.json()
-                for version in versions:
-                    if version['metadata']['container']['tags']:
+            for version in versions_response.json():
+                if version['metadata']['container']['tags']:
+                    for tag in version['metadata']['container']['tags']:
                         image_data.append({
-                            'branch': branch,
-                            'image': f"ghcr.io/{repo_name}:{branch}",
+                            'tag': tag,
+                            'image': f"ghcr.io/{org}/{repo_name}:{tag}",
                             'created': version['created_at'],
                             'digest': version['name'][:12],
                             'size': f"{round(version['size_bytes'] / (1024**2), 2)} MB"
                         })
-            except Exception as e:
-                print(f"Error processing {image_name}: {e}")
 
+        
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write("# GHCR Docker Images Report\n\n")
+            f.write(f"Repository: ghcr.io/{org}/{repo_name}\n")
             f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
-            f.write("| Branch | Image | Created | Digest | Size |\n")
-            f.write("|--------|-------|---------|--------|------|\n")
             
-            for item in sorted(image_data, key=lambda x: x['created'], reverse=True):
-                f.write(f"| {escape_md(item['branch'])} | `{escape_md(item['image'])}` | ")
-                f.write(f"{escape_md(item['created'])} | `{escape_md(item['digest'])}` | ")
-                f.write(f"{escape_md(item['size'])} |\n")
+            if image_data:
+                f.write("| Tag | Image | Created | Digest | Size |\n")
+                f.write("|-----|-------|---------|--------|------|\n")
+                
+                for item in sorted(image_data, key=lambda x: x['created'], reverse=True):
+                    f.write(f"| {escape_md(item['tag'])} | `{escape_md(item['image'])}` | ")
+                    f.write(f"{escape_md(item['created'])} | `{escape_md(item['digest'])}` | ")
+                    f.write(f"{escape_md(item['size'])} |\n")
+            else:
+                f.write("No container images found in GHCR.\n")
 
         print(f"Report generated: {output_file}")
         EOF
