@@ -13,11 +13,11 @@ on:
         required: false
         default: 'qubership-apihub-backend'
         type: string
-      show_digest:
-        description: 'Show image digests?'
+      max_results:
+        description: 'Maximum number of results to return (0 for all)'
         required: false
-        default: 'true'
-        type: boolean
+        default: '0'
+        type: number
 
 jobs:
   report-ghcr-images:
@@ -39,11 +39,11 @@ jobs:
       run: |
         pip install PyGithub requests
 
-    - name: Generate GHCR images report
+    - name: Generate comprehensive GHCR report
       env:
         GHCR_ORG: ${{ inputs.ghcr_org || 'Netcracker' }}
         REPO_NAME: ${{ inputs.repo_name || 'qubership-apihub-backend' }}
-        SHOW_DIGEST: ${{ inputs.show_digest || 'true' }}
+        MAX_RESULTS: ${{ inputs.max_results || 0 }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         python - <<"EOF"
@@ -52,112 +52,95 @@ jobs:
         from datetime import datetime
         from urllib.parse import quote
 
+        # Configuration
         org = os.getenv('GHCR_ORG')
         repo_name = os.getenv('REPO_NAME')
-        show_digest = os.getenv('SHOW_DIGEST', 'true').lower() == 'true'
+        max_results = int(os.getenv('MAX_RESULTS', 0))
         gh_token = os.getenv('GITHUB_TOKEN')
-        output_file = 'GHCR_IMAGES_REPORT.md'
+        output_file = 'GHCR_FULL_REPORT.md'
         api_url = "https://api.github.com"
 
-        def safe_get(data, *keys, default=""):
-            for key in keys:
+        # Improved data fetching
+        def get_all_versions():
+            headers = {
+                "Authorization": f"Bearer {gh_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            package_name = quote(repo_name.lower())
+            url = f"{api_url}/orgs/{org}/packages/container/{package_name}/versions?per_page=100"
+            
+            all_versions = []
+            page = 1
+            while True:
                 try:
-                    data = data[key]
-                except (KeyError, TypeError):
-                    return default
-            return data
-
-        def escape_md(text):
-            return str(text).replace("|", "\|").replace("`", "\`").replace("*", "\*")
-
-        headers = {
-            "Authorization": f"Bearer {gh_token}",
-            "Accept": "application/vnd.github.v3+json",
-            "X-GitHub-Api-Version": "2022-11-28"
-        }
-
-        image_data = []
-        package_name = quote(repo_name.lower())
-        url = f"{api_url}/orgs/{org}/packages/container/{package_name}/versions"
-        
-        try:
-            print(f"Fetching package versions from: {url}")
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            versions = response.json()
-
-            for version in versions:
-                try:
-                    tags = safe_get(version, "metadata", "container", "tags", default=[])
-                    if not tags:
-                        continue
+                    response = requests.get(f"{url}&page={page}", headers=headers)
+                    response.raise_for_status()
+                    versions = response.json()
+                    if not versions:
+                        break
                         
-                    created_at = safe_get(version, "created_at", default="N/A")
-                    digest = safe_get(version, "name", default="")[:12]
-                    size_bytes = safe_get(version, "size_in_bytes", default=0)
-                    size_mb = round(size_bytes / (1024**2), 2) if size_bytes else 0
+                    all_versions.extend(versions)
+                    print(f"Fetched page {page} with {len(versions)} items")
                     
-                    for tag in tags:
-                        image_data.append({
-                            'tag': tag,
-                            'image': f"ghcr.io/{org}/{repo_name}:{tag}",
-                            'created': created_at,
-                            'digest': digest,
-                            'size': f"{size_mb} MB"
-                        })
+                    if 0 < max_results <= len(all_versions):
+                        break
+                        
+                    page += 1
+                    if len(versions) < 100:
+                        break
                         
                 except Exception as e:
-                    print(f"Error processing version: {e}")
-                    continue
+                    print(f"Error fetching page {page}: {e}")
+                    break
+                    
+            return all_versions
 
-        except requests.exceptions.RequestException as e:
-            print(f"API request failed: {e}")
-            exit(1)
-
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write("# GHCR Docker Images Report\n\n")
-                f.write(f"Organization: {org}\n")
-                f.write(f"Repository: {repo_name}\n")
-                f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n")
-                
-                if image_data:
-                    columns = ["Tag", "Image", "Created", "Size"]
-                    if show_digest:
-                        columns.insert(3, "Digest")
-                    
-                    f.write("| " + " | ".join(columns) + " |\n")
-                    f.write("|" + "|".join(["-" * (len(col)+2) for col in columns]) + "|\n")
-                    
-                    for item in sorted(image_data, key=lambda x: x.get('created', ''), reverse=True):
-                        row = [
-                            escape_md(item.get('tag', 'N/A')),
-                            f"`{escape_md(item.get('image', 'N/A'))}`",
-                            escape_md(item.get('created', 'N/A')),
-                            escape_md(item.get('size', 'N/A'))
-                        ]
-                        if show_digest:
-                            row.insert(3, f"`{escape_md(item.get('digest', 'N/A'))}`")
-                        f.write("| " + " | ".join(row) + " |\n")
-                else:
-                    f.write("No container images found in GHCR.\n")
-                    
-            print(f"Successfully generated report: {output_file}")
+        # Process versions
+        versions = get_all_versions()
+        print(f"Total versions found: {len(versions)}")
+        
+        # Generate report
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"# Full GHCR Report for {org}/{repo_name}\n\n")
+            f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+            f.write(f"Total images: {len(versions)}\n\n")
             
-        except Exception as e:
-            print(f"Error writing report: {e}")
-            exit(1)
+            f.write("| Tag | Digest | Created | Size |\n")
+            f.write("|-----|--------|---------|------|\n")
+            
+            count = 0
+            for version in versions:
+                tags = version.get('metadata', {}).get('container', {}).get('tags', [])
+                if not tags:
+                    continue
+                    
+                for tag in tags:
+                    if max_results > 0 and count >= max_results:
+                        break
+                        
+                    digest = version.get('name', '')[:12]
+                    created = version.get('created_at', 'N/A')
+                    size = f"{round(version.get('size_in_bytes', 0) / (1024**2):.2f} MB"
+                    
+                    f.write(f"| {tag} | `{digest}` | {created} | {size} |\n")
+                    count += 1
+            
+            if max_results > 0 and count >= max_results:
+                f.write(f"\nShowing {count} of {len(versions)} total images\n")
 
-        try:
-            with open(output_file, 'r') as f:
-                print("\nReport content preview:")
-                print(f.read(1000) + ("..." if len(f.read()) > 1000 else ""))
-        except:
-            print("Could not read report file")
+        print(f"Report generated with {count} entries")
         EOF
 
-    - name: Upload artifact
+    - name: Show report summary
+      run: |
+        echo "Report contents:"
+        head -n 20 GHCR_FULL_REPORT.md
+        echo "..."
+        tail -n 5 GHCR_FULL_REPORT.md
+        echo "Full report saved as artifact"
+
+    - name: Upload full report
       uses: actions/upload-artifact@v4
       with:
-        name: ghcr-images-report
-        path: GHCR_IMAGES_REPORT.md
+        name: ghcr-full-report
+        path: GHCR_FULL_REPORT.md
