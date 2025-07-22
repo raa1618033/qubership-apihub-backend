@@ -132,7 +132,7 @@ jobs:
         cat DOCKER_IMAGES_TABLE.md
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: docker-images
