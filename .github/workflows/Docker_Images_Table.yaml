@@ -1,6 +1,5 @@
 name: Docker Images Table Generator
 
-
 on:
   workflow_dispatch:
 
@@ -29,17 +28,36 @@ jobs:
         python - <<EOF
         import os
         from github import Github
-    
-        token = os.getenv('GITHUB_TOKEN')
-        repo_name = os.getenv('SOURCE_REPO')
-    
-        
-        g = Github(token) if token else Github() 
-        repo = g.get_repo(repo_name)
-    
-        print(f"Repository: {repo.full_name}")
-        print(f"Description: {repo.description}")
-        print("\nBranches:")
-        for branch in repo.get_branches():
-            print(f"- {branch.name}")
+        import requests
+        import json
+       
+        source_repo = os.getenv('SOURCE_REPO')
+        gh_token = os.getenv('GITHUB_TOKEN')
+        output_file = 'DOCKER_IMAGES_TABLE.md'
+       
+        g = Github(gh_token)
+        repo = g.get_repo(source_repo)
+        branches = repo.get_branches()
+       
+        image_data = []
+        for branch in branches:
+            branch_name = branch.name
+            try:
+                dockerfile_content = repo.get_contents("Dockerfile", ref=branch_name)
+                image_name = f"ghcr.io/{source_repo}:{branch_name}"
+                image_data.append({
+                    'branch': branch_name,
+                    'image_name': image_name,
+                    'last_updated': branch.commit.commit.last_modified
+                })
+            except Exception as e:
+                print(f"No Dockerfile found in branch {branch_name} or error: {e}")
+        with open(output_file, 'w') as f:
+            f.write("# Docker Images Table\n\n")
+            f.write("| Branch | Image Name | Last Updated |\n")
+            f.write("|--------|------------|--------------|\n")
+            for item in image_data:
+                f.write(f"| {item['branch']} | `{item['image_name']}` | {item['last_updated']} |\n")
+
+        print(f"Table generated and saved to {output_file}")
         EOF
