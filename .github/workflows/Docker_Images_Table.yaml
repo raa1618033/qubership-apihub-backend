@@ -115,7 +115,6 @@ jobs:
                     image = item.get('image_name', 'N/A')
                     updated = item.get('last_updated', 'N/A')
                     
-                    # Экранирование обратных кавычек для Markdown
                     safe_image = str(image).replace('`', '\\`').replace('|', '\\|')
                     f.write(f"| {branch} | `{safe_image}` | {updated} |\n")
             
