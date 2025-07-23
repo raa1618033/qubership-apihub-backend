@@ -1,4 +1,4 @@
-name: Get GitLab Container Registry Images
+name: Docker images by tag
 on:
   workflow_dispatch:
     inputs:
