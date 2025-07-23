@@ -12,49 +12,53 @@ on:
         required: true
         default: 'qubership-apihub-backend'
       branch:
-        description: 'Git branch (optional, leave empty to ignore)'
+        description: 'Git branch (optional)'
         required: false
         default: ''
       tag:
-        description: 'Docker image tag to search for (e.g., v1.0.0)'
+        description: 'Docker image tag (e.g., v1.0.0)'
         required: true
 
 jobs:
   get-images:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate GitLab Token
+      - name: Check if GitLab Token is provided for private repos
+        id: check_token
         run: |
           if [ -z "${{ secrets.GITLAB_TOKEN }}" ]; then
-            echo "::error::GITLAB_TOKEN is not set in GitHub Secrets!"
-            exit 1
+            echo "⚠️ GITLAB_TOKEN not set. Proceeding for public repos only."
+            echo "token_provided=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ GITLAB_TOKEN is set (can access private repos)"
+            echo "token_provided=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Fetch project details
+      - name: Fetch project info
         env:
           GITLAB_ORG: "${{ inputs.org }}"
           GITLAB_REPO: "${{ inputs.repo }}"
-          GITLAB_API_URL: "https://gitlab.com/api/v4"  # Для self-hosted GitLab замените на свой URL
-          GITLAB_TOKEN: "${{ secrets.GITLAB_TOKEN }}"
+          GITLAB_API_URL: "https://gitlab.com/api/v4"  # Для self-hosted укажите свой URL
         run: |
-          # URL-кодирование пути проекта (для подгрупп)
+          # URL-кодирование пути (для подгрупп)
           PROJECT_PATH="${GITLAB_ORG//\//%2F}%2F${GITLAB_REPO//\//%2F}"
-          echo "🔍 Searching in project: $PROJECT_PATH"
+          echo "🔍 Project path: $PROJECT_PATH"
 
-          # Проверка доступности проекта и токена
-          PROJECT_INFO=$(curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-            "$GITLAB_API_URL/projects/$PROJECT_PATH")
+          # Заголовок авторизации (если токен есть)
+          AUTH_HEADER=""
+          if ${{ steps.check_token.outputs.token_provided == 'true' }}; then
+            AUTH_HEADER="PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}"
+          fi
 
-          if echo "$PROJECT_INFO" | jq -e '.message == "401 Unauthorized"' > /dev/null; then
-            echo "::error::401 Unauthorized. Invalid GITLAB_TOKEN or insufficient permissions!"
-            exit 1
-          elif echo "$PROJECT_INFO" | jq -e '.id' > /dev/null; then
-            PROJECT_ID=$(echo "$PROJECT_INFO" | jq -r '.id')
-            echo "✅ Project found. ID: $PROJECT_ID"
-            echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+          # Проверка доступности проекта
+          RESPONSE=$(curl -s -H "$AUTH_HEADER" "$GITLAB_API_URL/projects/$PROJECT_PATH")
+
+          if echo "$RESPONSE" | jq -e '.id' > /dev/null; then
+            echo "✅ Project found. ID: $(echo "$RESPONSE" | jq -r '.id')"
+            echo "PROJECT_ID=$(echo "$RESPONSE" | jq -r '.id')" >> $GITHUB_ENV
           else
-            echo "::error::Project not found. Check org/repo or token scope."
-            echo "API Response: $PROJECT_INFO"
+            echo "::error::Project not found or access denied. Response:"
+            echo "$RESPONSE"
             exit 1
           fi
 
@@ -62,13 +66,17 @@ jobs:
         env:
           GITLAB_BRANCH: "${{ inputs.branch }}"
           GITLAB_TAG: "${{ inputs.tag }}"
-          GITLAB_TOKEN: "${{ secrets.GITLAB_TOKEN }}"
         run: |
           echo "🔎 Searching for tag: $GITLAB_TAG (branch: ${GITLAB_BRANCH:-any})"
-          
+
+          # Заголовок авторизации (если токен есть)
+          AUTH_HEADER=""
+          if ${{ steps.check_token.outputs.token_provided == 'true' }}; then
+            AUTH_HEADER="PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}"
+          fi
+
           # Получаем список репозиториев в Registry
-          REPOSITORIES=$(curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-            "$GITLAB_API_URL/projects/$PROJECT_ID/registry/repositories")
+          REPOSITORIES=$(curl -s -H "$AUTH_HEADER" "$GITLAB_API_URL/projects/$PROJECT_ID/registry/repositories")
 
           if [ "$(echo "$REPOSITORIES" | jq length)" -eq 0 ]; then
             echo "No Docker repositories found in the project."
@@ -78,8 +86,7 @@ jobs:
           # Ищем образы с указанным тегом (и веткой, если задана)
           MATCHED_IMAGES=""
           for REPO_ID in $(echo "$REPOSITORIES" | jq -r '.[].id'); do
-            TAGS=$(curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-              "$GITLAB_API_URL/projects/$PROJECT_ID/registry/repositories/$REPO_ID/tags")
+            TAGS=$(curl -s -H "$AUTH_HEADER" "$GITLAB_API_URL/projects/$PROJECT_ID/registry/repositories/$REPO_ID/tags")
 
             FILTERED_TAGS=$(echo "$TAGS" | jq -r \
               --arg TAG "$GITLAB_TAG" \
