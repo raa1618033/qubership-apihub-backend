@@ -1,5 +1,6 @@
 name: Docker images by tag
 
+name: Get Docker Images from GHCR
 on:
   workflow_dispatch:
     inputs:
@@ -11,10 +12,6 @@ on:
         description: 'GitHub repository name (e.g., qubership-apihub-backend)'
         required: true
         default: 'qubership-apihub-backend'
-      branch:
-        description: 'Git branch (optional filter)'
-        required: false
-        default: ''
       tag:
         description: 'Docker image tag (e.g., v1.0.0)'
         required: true
@@ -38,31 +35,36 @@ jobs:
           OWNER: "${{ inputs.owner }}"
           REPO: "${{ inputs.repo }}"
           TAG: "${{ inputs.tag }}"
-          BRANCH: "${{ inputs.branch }}"
         run: |
-          # Формируем URL для запроса тегов
           URL="https://ghcr.io/v2/$OWNER/$REPO/tags/list"
+          echo "Request URL: $URL"
 
-          # Получаем список всех тегов
-          TAGS_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$URL")
-          echo "Available tags: $(echo "$TAGS_RESPONSE" | jq -r '.tags[]')"
+          TAGS_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.oci.image.index.v1+json" "$URL")
+          
+          if [ -z "$TAGS_RESPONSE" ] || [ "$TAGS_RESPONSE" = "null" ]; then
+            echo "::error::No tags found or repository doesn't exist"
+            echo "Response: $TAGS_RESPONSE"
+            exit 1
+          fi
 
-          # Фильтруем по нужному тегу
-          FILTERED_TAGS=$(echo "$TAGS_RESPONSE" | jq -r --arg TAG "$TAG" '.tags[] | select(. == $TAG)')
-
-          if [ -z "$FILTERED_TAGS" ]; then
-            echo "❌ No images found with tag: $TAG"
+          ALL_TAGS=$(echo "$TAGS_RESPONSE" | jq -r '.tags[]?')
+          if [ -z "$ALL_TAGS" ]; then
+            echo "::warning::No tags available in the repository"
             exit 0
           fi
 
-          # Формируем список образов
-          IMAGES=""
-          for T in $FILTERED_TAGS; do
-            IMAGES+="ghcr.io/$OWNER/$REPO:$T"$'\n'
-          done
+          echo "Available tags:"
+          echo "$ALL_TAGS"
+
+          FILTERED_TAGS=$(echo "$ALL_TAGS" | grep -w "$TAG" || true)
+          
+          if [ -z "$FILTERED_TAGS" ]; then
+            echo "::warning::No images found with tag: $TAG"
+            exit 0
+          fi
 
           echo "🎉 Found images:"
-          echo "$IMAGES"
-          echo "IMAGES_LIST<<EOF" >> $GITHUB_ENV
-          echo "$IMAGES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          for T in $FILTERED_TAGS; do
+            echo "ghcr.io/$OWNER/$REPO:$T"
+            echo "ghcr.io/$OWNER/$REPO:$T" >> $GITHUB_ENV
+          done
