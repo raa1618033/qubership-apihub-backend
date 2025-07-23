@@ -1,0 +1,74 @@
+name: Get GitLab Container Registry Images
+on:
+  workflow_dispatch:
+    inputs:
+      org:
+        description: 'GitLab organization/group (e.g., myorg)'
+        required: true
+      repo:
+        description: 'GitLab repository name (e.g., myrepo)'
+        required: true
+      branch:
+        description: 'Git branch (optional for filtering)'
+        required: false
+        default: ''
+      tag:
+        description: 'Docker image tag to search for'
+        required: true
+
+jobs:
+  get-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch project ID and images from GitLab
+        env:
+          GITLAB_ORG: "${{ inputs.org }}"
+          GITLAB_REPO: "${{ inputs.repo }}"
+          GITLAB_BRANCH: "${{ inputs.branch }}"
+          GITLAB_TAG: "${{ inputs.tag }}"
+          GITLAB_TOKEN: "${{ secrets.GITLAB_TOKEN }}"
+        run: |
+          # Get project ID (URL-encoded path)
+          PROJECT_PATH="${GITLAB_ORG}%2F${GITLAB_REPO}"
+          echo "Searching in project: $PROJECT_PATH"
+
+          # Fetch project details to get ID
+          PROJECT_INFO=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "https://gitlab.com/api/v4/projects/$PROJECT_PATH")
+          PROJECT_ID=$(echo "$PROJECT_INFO" | jq -r '.id')
+          echo "Project ID: $PROJECT_ID"
+
+          # Get all repositories in the project
+          REPOSITORIES=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "https://gitlab.com/api/v4/projects/$PROJECT_ID/registry/repositories")
+
+          # Extract repository IDs
+          REPO_IDS=$(echo "$REPOSITORIES" | jq -r '.[].id')
+          echo "Repository IDs: $REPO_IDS"
+
+          # Search for images with the specified tag (and optionally branch)
+          MATCHED_IMAGES=""
+          for REPO_ID in $REPO_IDS; do
+            TAGS=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+              "https://gitlab.com/api/v4/projects/$PROJECT_ID/registry/repositories/$REPO_ID/tags")
+            
+            # Filter by tag and branch (if provided)
+            FILTERED_TAGS=$(echo "$TAGS" | jq -r \
+              --arg TAG "$GITLAB_TAG" \
+              --arg BRANCH "$GITLAB_BRANCH" \
+              '.[] | select(.name == $TAG) | select(if ($BRANCH != "") then (.release.short_commit_description // "" | contains($BRANCH)) else true end) | .location')
+            
+            if [ -n "$FILTERED_TAGS" ]; then
+              MATCHED_IMAGES+="$FILTERED_TAGS"$'\n'
+            fi
+          done
+
+          if [ -z "$MATCHED_IMAGES" ]; then
+            echo "No images found with tag '$GITLAB_TAG' and branch '$GITLAB_BRANCH'."
+          else
+            echo "Matched images:"
+            echo "$MATCHED_IMAGES"
+            echo "IMAGES_LIST<<EOF" >> $GITHUB_ENV
+            echo "$MATCHED_IMAGES" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
