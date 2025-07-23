@@ -1,6 +1,5 @@
 name: Docker images by tag
 
-name: Get Docker Images from GHCR
 on:
   workflow_dispatch:
     inputs:
