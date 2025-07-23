@@ -4,66 +4,50 @@ on:
   workflow_dispatch:
     inputs:
       owner:
-        description: 'GitHub owner/organization (e.g., Netcracker)'
+        description: 'GitHub owner/organization'
         required: true
         default: 'Netcracker'
       repo:
-        description: 'GitHub repository name (e.g., qubership-apihub-backend)'
+        description: 'GitHub repository name'
         required: true
         default: 'qubership-apihub-backend'
       tag:
-        description: 'Docker image tag (e.g., v1.0.0)'
+        description: 'Docker image tag to search for'
         required: true
 
 jobs:
   get-images:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fetch images by tag
+      - name: Setup Docker and authenticate
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+      - name: Get image metadata
         env:
           OWNER: "${{ inputs.owner }}"
           REPO: "${{ inputs.repo }}"
           TAG: "${{ inputs.tag }}"
         run: |
-          URL="https://ghcr.io/v2/$OWNER/$REPO/tags/list"
-          echo "Request URL: $URL"
-
-          TAGS_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.oci.image.index.v1+json" "$URL")
-          
-          if [ -z "$TAGS_RESPONSE" ] || [ "$TAGS_RESPONSE" = "null" ]; then
-            echo "::error::No tags found or repository doesn't exist"
-            echo "Response: $TAGS_RESPONSE"
+          if ! docker manifest inspect ghcr.io/$OWNER/$REPO:$TAG > /dev/null 2>&1; then
+            echo "::error::Image ghcr.io/$OWNER/$REPO:$TAG not found!"
+            echo "Available tags:"
+            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://ghcr.io/v2/$OWNER/$REPO/tags/list" | jq -r '.tags[]?' || echo "None"
             exit 1
           fi
-
-          ALL_TAGS=$(echo "$TAGS_RESPONSE" | jq -r '.tags[]?')
-          if [ -z "$ALL_TAGS" ]; then
-            echo "::warning::No tags available in the repository"
-            exit 0
-          fi
-
-          echo "Available tags:"
-          echo "$ALL_TAGS"
-
-          FILTERED_TAGS=$(echo "$ALL_TAGS" | grep -w "$TAG" || true)
           
-          if [ -z "$FILTERED_TAGS" ]; then
-            echo "::warning::No images found with tag: $TAG"
-            exit 0
-          fi
-
-          echo "🎉 Found images:"
-          for T in $FILTERED_TAGS; do
-            echo "ghcr.io/$OWNER/$REPO:$T"
-            echo "ghcr.io/$OWNER/$REPO:$T" >> $GITHUB_ENV
-          done
+          echo "Image details:"
+          docker inspect ghcr.io/$OWNER/$REPO:$TAG | jq '.[] | {RepoTags, Created, Labels}'
+          
+          echo "IMAGE_NAME=ghcr.io/$OWNER/$REPO:$TAG" >> $GITHUB_ENV
+          echo "IMAGE_DIGEST=$(docker inspect --format='{{.RepoDigests}}' ghcr.io/$OWNER/$REPO:$TAG)" >> $GITHUB_ENV
+          
+      - name: Output results
+        run: |
+          echo "✅ Found image: $IMAGE_NAME"
+          echo "🔍 Digest: $IMAGE_DIGEST"
