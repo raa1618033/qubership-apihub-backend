@@ -39,94 +39,95 @@ jobs:
       run: |
         pip install PyGithub requests
 
-    - name: Generate comprehensive GHCR report
-      env:
-        GHCR_ORG: ${{ inputs.ghcr_org || 'Netcracker' }}
-        REPO_NAME: ${{ inputs.repo_name || 'qubership-apihub-backend' }}
-        MAX_RESULTS: ${{ inputs.max_results || 0 }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        python - <<"EOF"
-        import os
-        import requests
-        from datetime import datetime
-        from urllib.parse import quote
+- name: Generate comprehensive GHCR report
+  env:
+    GHCR_ORG: ${{ inputs.ghcr_org || 'Netcracker' }}
+    REPO_NAME: ${{ inputs.repo_name || 'qubership-apihub-backend' }}
+    MAX_RESULTS: ${{ inputs.max_results || 0 }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    python - <<"EOF"
+    import os
+    import requests
+    from datetime import datetime
+    from urllib.parse import quote
 
-        org = os.getenv('GHCR_ORG')
-        repo_name = os.getenv('REPO_NAME')
-        max_results = int(os.getenv('MAX_RESULTS', 0))
-        gh_token = os.getenv('GITHUB_TOKEN')
-        output_file = 'GHCR_FULL_REPORT.md'
-        api_url = "https://api.github.com"
+    org = os.getenv('GHCR_ORG')
+    repo_name = os.getenv('REPO_NAME')
+    max_results = int(os.getenv('MAX_RESULTS', 0))
+    gh_token = os.getenv('GITHUB_TOKEN')
+    output_file = 'GHCR_FULL_REPORT.md'
+    api_url = "https://api.github.com"
 
-        def get_all_versions():
-            headers = {
-                "Authorization": f"Bearer {gh_token}",
-                "Accept": "application/vnd.github.v3+json"
-            }
-            package_name = quote(repo_name.lower())
-            url = f"{api_url}/orgs/{org}/packages/container/{package_name}/versions?per_page=100"
-            
-            all_versions = []
-            page = 1
-            while True:
-                try:
-                    response = requests.get(f"{url}&page={page}", headers=headers)
-                    response.raise_for_status()
-                    versions = response.json()
-                    if not versions:
-                        break
-                        
-                    all_versions.extend(versions)
-                    print(f"Fetched page {page} with {len(versions)} items")
-                    
-                    if 0 < max_results <= len(all_versions):
-                        break
-                        
-                    page += 1
-                    if len(versions) < 100:
-                        break
-                        
-                except Exception as e:
-                    print(f"Error fetching page {page}: {e}")
+    def get_all_versions():
+        headers = {
+            "Authorization": f"Bearer {gh_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        package_name = quote(repo_name.lower())
+        url = f"{api_url}/orgs/{org}/packages/container/{package_name}/versions?per_page=100"
+        
+        all_versions = []
+        page = 1
+        while True:
+            try:
+                response = requests.get(f"{url}&page={page}", headers=headers)
+                response.raise_for_status()
+                versions = response.json()
+                if not versions:
                     break
                     
-            return all_versions
+                all_versions.extend(versions)
+                print(f"Fetched page {page} with {len(versions)} items")
+                
+                if 0 < max_results <= len(all_versions):
+                    break
+                    
+                page += 1
+                if len(versions) < 100:
+                    break
+                    
+            except Exception as e:
+                print(f"Error fetching page {page}: {e}")
+                break
+                
+        return all_versions
 
-        versions = get_all_versions()
-        print(f"Total versions found: {len(versions)}")
+    versions = get_all_versions()
+    print(f"Total versions found: {len(versions)}")
+    
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(f"# Full GHCR Report for {org}/{repo_name}\n\n")
+        f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+        f.write(f"Total images: {len(versions)}\n\n")
         
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(f"# Full GHCR Report for {org}/{repo_name}\n\n")
-            f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
-            f.write(f"Total images: {len(versions)}\n\n")
-            
-            f.write("| Tag | Digest | Created | Size |\n")
-            f.write("|-----|--------|---------|------|\n")
-            
-            count = 0
-            for version in versions:
-                tags = version.get('metadata', {}).get('container', {}).get('tags', [])
-                if not tags:
-                    continue
+        f.write("| Tag | Digest | Created | Size |\n")
+        f.write("|-----|--------|---------|------|\n")
+        
+        count = 0
+        for version in versions:
+            tags = version.get('metadata', {}).get('container', {}).get('tags', [])
+            if not tags:
+                continue
+                
+            for tag in tags:
+                if max_results > 0 and count >= max_results:
+                    break
                     
-                for tag in tags:
-                    if max_results > 0 and count >= max_results:
-                        break
-                        
-                    digest = version.get('name', '')[:12]
-                    created = version.get('created_at', 'N/A')
-                    size_mb = round(version.get('size_in_bytes', 0) / (1024**2)
-                    size = f"{size_mb:.2f} MB"
-                    
-                    f.write(f"| {tag} | `{digest}` | {created} | {size} |\n")
-                    count += 1
-            
-            if max_results > 0 and count >= max_results:
-                f.write(f"\nShowing {count} of {len(versions)} total images\n")
+                digest = version.get('name', '')[:12]
+                created = version.get('created_at', 'N/A')
+                size_bytes = version.get('size_in_bytes', 0)
+                size_mb = round(size_bytes / (1024**2), 2)  # Fixed parentheses
+                size = f"{size_mb} MB"
+                
+                f.write(f"| {tag} | `{digest}` | {created} | {size} |\n")
+                count += 1
+        
+        if max_results > 0 and count >= max_results:
+            f.write(f"\nShowing {count} of {len(versions)} total images\n")
 
-        print(f"Report generated with {count} entries")
-        EOF
+    print(f"Report generated with {count} entries")
+    EOF
 
     - name: Show report summary
       run: |
