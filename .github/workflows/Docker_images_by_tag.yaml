@@ -1,19 +1,22 @@
 name: Docker images by tag
+
 on:
   workflow_dispatch:
     inputs:
       org:
-        description: 'GitLab organization/group (e.g., myorg)'
+        description: 'GitLab organization/group (e.g., Netcracker)'
         required: true
+        default: 'Netcracker'
       repo:
-        description: 'GitLab repository name (e.g., myrepo)'
+        description: 'GitLab repository name (e.g., qubership-apihub-backend)'
         required: true
+        default: 'qubership-apihub-backend'
       branch:
-        description: 'Git branch (optional for filtering)'
+        description: 'Git branch (optional, leave empty to ignore)'
         required: false
         default: ''
       tag:
-        description: 'Docker image tag to search for'
+        description: 'Docker image tag to search for (e.g., v1.0.0)'
         required: true
 
 jobs:
@@ -28,14 +31,18 @@ jobs:
           GITLAB_TAG: "${{ inputs.tag }}"
           GITLAB_TOKEN: "${{ secrets.GITLAB_TOKEN }}"
         run: |
-          # Get project ID (URL-encoded path)
-          PROJECT_PATH="${GITLAB_ORG}%2F${GITLAB_REPO}"
+          # URL-encode the project path (replace "/" with "%2F")
+          PROJECT_PATH="${GITLAB_ORG//\//%2F}%2F${GITLAB_REPO//\//%2F}"
           echo "Searching in project: $PROJECT_PATH"
 
           # Fetch project details to get ID
           PROJECT_INFO=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
             "https://gitlab.com/api/v4/projects/$PROJECT_PATH")
           PROJECT_ID=$(echo "$PROJECT_INFO" | jq -r '.id')
+          if [ "$PROJECT_ID" == "null" ]; then
+            echo "::error::Project not found or access denied. Check org/repo and token permissions."
+            exit 1
+          fi
           echo "Project ID: $PROJECT_ID"
 
           # Get all repositories in the project
@@ -44,6 +51,10 @@ jobs:
 
           # Extract repository IDs
           REPO_IDS=$(echo "$REPOSITORIES" | jq -r '.[].id')
+          if [ -z "$REPO_IDS" ]; then
+            echo "No Docker repositories found in the project."
+            exit 0
+          fi
           echo "Repository IDs: $REPO_IDS"
 
           # Search for images with the specified tag (and optionally branch)
