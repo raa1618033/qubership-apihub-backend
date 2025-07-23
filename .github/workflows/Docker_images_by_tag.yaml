@@ -3,16 +3,16 @@ name: Docker images by tag
 on:
   workflow_dispatch:
     inputs:
-      org:
-        description: 'GitLab organization/group (e.g., Netcracker)'
+      owner:
+        description: 'GitHub owner/organization (e.g., Netcracker)'
         required: true
         default: 'Netcracker'
       repo:
-        description: 'GitLab repository name (e.g., qubership-apihub-backend)'
+        description: 'GitHub repository name (e.g., qubership-apihub-backend)'
         required: true
         default: 'qubership-apihub-backend'
       branch:
-        description: 'Git branch (optional)'
+        description: 'Git branch (optional filter)'
         required: false
         default: ''
       tag:
@@ -23,73 +23,46 @@ jobs:
   get-images:
     runs-on: ubuntu-latest
     steps:
-      - name: Configure GitLab auth
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch images by tag
         env:
-          GITLAB_TOKEN: "${{ secrets.GITLAB_TOKEN }}"
+          OWNER: "${{ inputs.owner }}"
+          REPO: "${{ inputs.repo }}"
+          TAG: "${{ inputs.tag }}"
+          BRANCH: "${{ inputs.branch }}"
         run: |
-          if [ -n "$GITLAB_TOKEN" ]; then
-            echo "GITLAB_AUTH_HEADER=Authorization: Bearer $GITLAB_TOKEN" >> $GITHUB_ENV
-            echo "✅ GitLab token provided (private repos supported)"
-          else
-            echo "GITLAB_AUTH_HEADER=" >> $GITHUB_ENV
-            echo "⚠️ No GitLab token - using public access only"
-          fi
+          # Формируем URL для запроса тегов
+          URL="https://ghcr.io/v2/$OWNER/$REPO/tags/list"
 
-      - name: Fetch project info
-        env:
-          GITLAB_ORG: "${{ inputs.org }}"
-          GITLAB_REPO: "${{ inputs.repo }}"
-          GITLAB_API_URL: "https://gitlab.com/api/v4"
-        run: |
-          PROJECT_PATH="${GITLAB_ORG//\//%2F}%2F${GITLAB_REPO//\//%2F}"
-          echo "🔍 Querying project: $PROJECT_PATH"
+          # Получаем список всех тегов
+          TAGS_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$URL")
+          echo "Available tags: $(echo "$TAGS_RESPONSE" | jq -r '.tags[]')"
 
-          RESPONSE=$(curl -s -H "$GITLAB_AUTH_HEADER" "$GITLAB_API_URL/projects/$PROJECT_PATH")
+          # Фильтруем по нужному тегу
+          FILTERED_TAGS=$(echo "$TAGS_RESPONSE" | jq -r --arg TAG "$TAG" '.tags[] | select(. == $TAG)')
 
-          if echo "$RESPONSE" | jq -e '.id' > /dev/null; then
-            PROJECT_ID=$(echo "$RESPONSE" | jq -r '.id')
-            echo "✅ Project ID: $PROJECT_ID"
-            echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
-          else
-            echo "::error::Failed to fetch project. Response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-      - name: Search Docker images
-        env:
-          GITLAB_TAG: "${{ inputs.tag }}"
-          GITLAB_BRANCH: "${{ inputs.branch }}"
-        run: |
-          REPOS=$(curl -s -H "$GITLAB_AUTH_HEADER" \
-            "$GITLAB_API_URL/projects/$PROJECT_ID/registry/repositories")
-
-          if [ "$(echo "$REPOS" | jq length)" -eq 0 ]; then
-            echo "No container registries found in project"
+          if [ -z "$FILTERED_TAGS" ]; then
+            echo "❌ No images found with tag: $TAG"
             exit 0
           fi
 
-          MATCHED_IMAGES=""
-          for REPO_ID in $(echo "$REPOS" | jq -r '.[].id'); do
-            TAGS=$(curl -s -H "$GITLAB_AUTH_HEADER" \
-              "$GITLAB_API_URL/projects/$PROJECT_ID/registry/repositories/$REPO_ID/tags")
-
-            FILTERED=$(echo "$TAGS" | jq -r \
-              --arg TAG "$GITLAB_TAG" \
-              --arg BRANCH "$GITLAB_BRANCH" \
-              '.[] | select(.name == $TAG) | select(if ($BRANCH != "") then (.release.description // "" | contains($BRANCH)) else true end) | .location')
-
-            if [ -n "$FILTERED" ]; then
-              MATCHED_IMAGES+="$FILTERED"$'\n'
-            fi
+          # Формируем список образов
+          IMAGES=""
+          for T in $FILTERED_TAGS; do
+            IMAGES+="ghcr.io/$OWNER/$REPO:$T"$'\n'
           done
 
-          if [ -z "$MATCHED_IMAGES" ]; then
-            echo "❌ No images found with tag '$GITLAB_TAG'${GITLAB_BRANCH:+ and branch '$GITLAB_BRANCH'}"
-          else
-            echo "🎉 Found images:"
-            echo "$MATCHED_IMAGES"
-            echo "IMAGES_LIST<<EOF" >> $GITHUB_ENV
-            echo "$MATCHED_IMAGES" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-          fi
+          echo "🎉 Found images:"
+          echo "$IMAGES"
+          echo "IMAGES_LIST<<EOF" >> $GITHUB_ENV
+          echo "$IMAGES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
