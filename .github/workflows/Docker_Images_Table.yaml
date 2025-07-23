@@ -40,7 +40,7 @@ jobs:
         REPO_NAME: ${{ inputs.repo_name || 'qubership-apihub-backend' }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        python - <<"EOF"
+        cat << 'PYTHON_SCRIPT' > ghcr_report.py
         import os
         import requests
         from datetime import datetime
@@ -107,6 +107,7 @@ jobs:
             f.write(f"Tagged versions: {sum(len(v) for v in tagged_versions.values())} (in {len(tagged_versions)} tags)\n")
             f.write(f"Untagged versions: {len(untagged_versions)}\n\n")
             
+            # Tagged images section
             f.write("## Tagged Images\n\n")
             for tag, images in sorted(tagged_versions.items()):
                 f.write(f"### Tag: {tag} ({len(images)} versions)\n\n")
@@ -116,7 +117,6 @@ jobs:
                     f.write(f"| {img['created']} | `{img['digest']}` | {img['size']} | `{img['full_digest']}` |\n")
                 f.write("\n")
             
-            # Untagged images section
             if untagged_versions:
                 f.write("## Untagged Images\n\n")
                 f.write("| Created | Digest | Size | Full Digest |\n")
@@ -125,7 +125,11 @@ jobs:
                     f.write(f"| {img['created']} | `{img['digest']}` | {img['size']} | `{img['full_digest']}` |\n")
     
         print(f"Report generated with {len(versions)} total versions")
-        EOF        
+        PYTHON_SCRIPT
+    
+        python ghcr_report.py
+        cat GHCR_COMPLETE_REPORT.md
+
     - name: Show report summary
       run: |
         echo "Report summary:"
