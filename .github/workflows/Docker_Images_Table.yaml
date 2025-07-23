@@ -46,13 +46,13 @@ jobs:
         from datetime import datetime
         from urllib.parse import quote
         from collections import defaultdict
-
+    
         org = os.getenv('GHCR_ORG')
         repo_name = os.getenv('REPO_NAME')
         gh_token = os.getenv('GITHUB_TOKEN')
         output_file = 'GHCR_FULL_REPORT.md'
         api_url = "https://api.github.com"
-
+    
         def get_all_versions():
             headers = {
                 "Authorization": f"Bearer {gh_token}",
@@ -78,20 +78,22 @@ jobs:
                     break
                     
             return all_versions
-
+    
         versions = get_all_versions()
         tag_to_versions = defaultdict(list)
         
         for version in versions:
             tags = version.get('metadata', {}).get('container', {}).get('tags', [])
             for tag in tags:
+                size_bytes = version.get('size_in_bytes', 0)
+                size_mb = round(size_bytes / (1024**2), 2)
                 tag_to_versions[tag].append({
                     'created': version.get('created_at', 'Unknown'),
                     'digest': version.get('name', '')[:12],
-                    'size': f"{round(version.get('size_in_bytes', 0) / (1024**2):.2f} MB",
+                    'size': f"{size_mb} MB",
                     'full_digest': version.get('name', '')
                 })
-
+    
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"# Full GHCR Images Report for {org}/{repo_name}\n\n")
             f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
@@ -106,10 +108,10 @@ jobs:
                 for img in sorted(images, key=lambda x: x['created'], reverse=True):
                     f.write(f"| {img['created']} | `{img['digest']}` | {img['size']} | `{img['full_digest']}` |\n")
                 f.write("\n")
-
+    
         print(f"Report generated with {len(tag_to_versions)} tags and {len(versions)} total versions")
         EOF
-
+        
     - name: Show report summary
       run: |
         echo "Report summary:"
