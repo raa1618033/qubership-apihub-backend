@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ghcr_org:
-        description: 'GitHub Organization/User name'
+        description: 'GitHub Organization name'
         required: false
         default: 'Netcracker'
         type: string
@@ -13,11 +13,6 @@ on:
         required: false
         default: 'qubership-apihub-backend'
         type: string
-      max_results:
-        description: 'Maximum number of results to return (0 for all)'
-        required: false
-        default: '0'
-        type: number
 
 jobs:
   report-ghcr-images:
@@ -39,11 +34,10 @@ jobs:
       run: |
         pip install PyGithub requests
 
-    - name: Generate comprehensive GHCR report
+    - name: Generate full GHCR report
       env:
         GHCR_ORG: ${{ inputs.ghcr_org || 'Netcracker' }}
         REPO_NAME: ${{ inputs.repo_name || 'qubership-apihub-backend' }}
-        MAX_RESULTS: ${{ inputs.max_results || 0 }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         python - <<"EOF"
@@ -51,14 +45,14 @@ jobs:
         import requests
         from datetime import datetime
         from urllib.parse import quote
-    
+        from collections import defaultdict
+
         org = os.getenv('GHCR_ORG')
         repo_name = os.getenv('REPO_NAME')
-        max_results = int(os.getenv('MAX_RESULTS', 0))
         gh_token = os.getenv('GITHUB_TOKEN')
         output_file = 'GHCR_FULL_REPORT.md'
         api_url = "https://api.github.com"
-    
+
         def get_all_versions():
             headers = {
                 "Authorization": f"Bearer {gh_token}",
@@ -70,71 +64,57 @@ jobs:
             all_versions = []
             page = 1
             while True:
-                try:
-                    response = requests.get(f"{url}&page={page}", headers=headers)
-                    response.raise_for_status()
-                    versions = response.json()
-                    if not versions:
-                        break
-                        
-                    all_versions.extend(versions)
-                    print(f"Fetched page {page} with {len(versions)} items")
+                response = requests.get(f"{url}&page={page}", headers=headers)
+                response.raise_for_status()
+                versions = response.json()
+                if not versions:
+                    break
                     
-                    if 0 < max_results <= len(all_versions):
-                        break
-                        
-                    page += 1
-                    if len(versions) < 100:
-                        break
-                        
-                except Exception as e:
-                    print(f"Error fetching page {page}: {e}")
+                all_versions.extend(versions)
+                print(f"Fetched page {page} with {len(versions)} items")
+                
+                page += 1
+                if len(versions) < 100:
                     break
                     
             return all_versions
-    
+
         versions = get_all_versions()
-        print(f"Total versions found: {len(versions)}")
+        tag_to_versions = defaultdict(list)
         
+        for version in versions:
+            tags = version.get('metadata', {}).get('container', {}).get('tags', [])
+            for tag in tags:
+                tag_to_versions[tag].append({
+                    'created': version.get('created_at', 'Unknown'),
+                    'digest': version.get('name', '')[:12],
+                    'size': f"{round(version.get('size_in_bytes', 0) / (1024**2):.2f} MB",
+                    'full_digest': version.get('name', '')
+                })
+
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(f"# Full GHCR Report for {org}/{repo_name}\n\n")
+            f.write(f"# Full GHCR Images Report for {org}/{repo_name}\n\n")
             f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
-            f.write(f"Total images: {len(versions)}\n\n")
+            f.write(f"Total unique tags: {len(tag_to_versions)}\n")
+            f.write(f"Total image versions: {len(versions)}\n\n")
             
-            f.write("| Tag | Digest | Created | Size |\n")
-            f.write("|-----|--------|---------|------|\n")
-            
-            count = 0
-            for version in versions:
-                tags = version.get('metadata', {}).get('container', {}).get('tags', [])
-                if not tags:
-                    continue
-                    
-                for tag in tags:
-                    if max_results > 0 and count >= max_results:
-                        break
-                        
-                    digest = version.get('name', '')[:12]
-                    created = version.get('created_at', 'N/A')
-                    size_bytes = version.get('size_in_bytes', 0)
-                    size_mb = round(size_bytes / (1024**2), 2)  # Fixed parentheses
-                    size = f"{size_mb} MB"
-                    
-                    f.write(f"| {tag} | `{digest}` | {created} | {size} |\n")
-                    count += 1
-            
-            if max_results > 0 and count >= max_results:
-                f.write(f"\nShowing {count} of {len(versions)} total images\n")
-    
-        print(f"Report generated with {count} entries")
+            for tag, images in sorted(tag_to_versions.items()):
+                f.write(f"## Tag: {tag} ({len(images)} versions)\n\n")
+                f.write("| Created | Digest | Size | Full Digest |\n")
+                f.write("|---------|--------|------|-------------|\n")
+                
+                for img in sorted(images, key=lambda x: x['created'], reverse=True):
+                    f.write(f"| {img['created']} | `{img['digest']}` | {img['size']} | `{img['full_digest']}` |\n")
+                f.write("\n")
+
+        print(f"Report generated with {len(tag_to_versions)} tags and {len(versions)} total versions")
         EOF
 
     - name: Show report summary
       run: |
-        echo "Report contents:"
-        head -n 20 GHCR_FULL_REPORT.md
+        echo "Report summary:"
+        grep -A 5 "^## Tag:" GHCR_FULL_REPORT.md | head -20
         echo "..."
-        tail -n 5 GHCR_FULL_REPORT.md
         echo "Full report saved as artifact"
 
     - name: Upload full report
