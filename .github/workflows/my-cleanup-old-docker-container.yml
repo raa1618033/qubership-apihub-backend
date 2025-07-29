@@ -43,7 +43,7 @@ jobs:
           echo "**Dry-run**: ${{ github.event.inputs.dry-run || 'false' }}"
           echo "**Included patterns**: ${{ github.event.inputs.included-patterns || 'sha:*' }}"
       - name: Run Container Package Cleanup Action
-        uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@v1.0.3
+        uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@main
         with:
           threshold-days: ${{ github.event.inputs.threshold-days || 8 }}
           included-tags: ${{ github.event.inputs.included-tags || 'dev*' }}
