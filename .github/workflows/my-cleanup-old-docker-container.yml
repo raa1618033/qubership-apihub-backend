@@ -1,0 +1,54 @@
+---
+# This workflow is designed to clean up old Docker container versions in a GitHub repository.
+name: my Cleanup Old Docker Container Versions
+run-name: "${{ github.event_name }} - ${{ github.actor }}"
+on:
+  workflow_dispatch:
+    inputs:
+      threshold-days:
+        description: "Number of days to keep container versions"
+        required: false
+        default: "3"
+      included-tags:
+        description: "Tags to include for deletion"
+        required: false
+        default: ""
+      excluded-tags:
+        description: "Tags to exclude from deletion"
+        required: false
+        default: "release*"
+      dry-run:
+        description: "Enable dry-run mode"
+        required: false
+        default: "true"
+      included-patterns:
+        description: "A comma-separated list of patterns to include for deletion."
+        required: false
+        default: "sha:*"
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Summary"
+        run: |
+          echo "**Event**: ${{ github.event_name }}"
+          echo "**Actor**: ${{ github.actor }}"
+          echo "**Threshold days**: ${{ github.event.inputs.threshold-days || 8 }}"
+          echo "**Included tags**: ${{ github.event.inputs.included-tags || 'dev*' }}"
+          echo "**Excluded tags**: ${{ github.event.inputs.excluded-tags || 'release*' }}"
+          echo "**Dry-run**: ${{ github.event.inputs.dry-run || 'false' }}"
+          echo "**Included patterns**: ${{ github.event.inputs.included-patterns || 'sha:*' }}"
+      - name: Run Container Package Cleanup Action
+        uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@v1.0.3
+        with:
+          threshold-days: ${{ github.event.inputs.threshold-days || 8 }}
+          included-tags: ${{ github.event.inputs.included-tags || 'dev*' }}
+          excluded-tags: ${{ github.event.inputs.excluded-tags || 'release*' }}
+          dry-run: ${{ github.event.inputs.dry-run || 'true' }}
+          included-patterns: ${{ github.event.inputs.included-patterns || 'sha:*' }}
+        env:
+          PACKAGE_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
