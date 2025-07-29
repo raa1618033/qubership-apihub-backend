@@ -25,6 +25,9 @@ on:
         description: "A comma-separated list of patterns to include for deletion."
         required: false
         default: "sha:*"
+      debug:
+        description: "Enable debug mode."
+        default: "false"
 permissions:
   contents: read
 
@@ -42,6 +45,7 @@ jobs:
           echo "**Excluded tags**: ${{ github.event.inputs.excluded-tags || 'release*' }}"
           echo "**Dry-run**: ${{ github.event.inputs.dry-run || 'false' }}"
           echo "**Included patterns**: ${{ github.event.inputs.included-patterns || 'sha:*' }}"
+          echo "**Debug**: ${{ github.event.inputs.debug || 'false' }}"
       - name: Run Container Package Cleanup Action
         uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@main
         with:
@@ -50,5 +54,6 @@ jobs:
           excluded-tags: ${{ github.event.inputs.excluded-tags || 'release*' }}
           dry-run: ${{ github.event.inputs.dry-run || 'true' }}
           included-patterns: ${{ github.event.inputs.included-patterns || 'sha:*' }}
+          debug: ${{ github.event.inputs.debug || 'false' }}
         env:
           PACKAGE_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
