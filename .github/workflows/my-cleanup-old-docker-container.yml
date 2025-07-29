@@ -21,13 +21,11 @@ on:
         description: "Enable dry-run mode"
         required: false
         default: "true"
-      included-patterns:
-        description: "A comma-separated list of patterns to include for deletion."
-        required: false
-        default: "sha:*"
+        type: boolean
       debug:
         description: "Enable debug mode."
         default: "false"
+        type: boolean
 permissions:
   contents: read
 
