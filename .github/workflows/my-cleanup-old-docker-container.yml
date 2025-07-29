@@ -42,7 +42,6 @@ jobs:
           echo "**Included tags**: ${{ github.event.inputs.included-tags || 'dev*' }}"
           echo "**Excluded tags**: ${{ github.event.inputs.excluded-tags || 'release*' }}"
           echo "**Dry-run**: ${{ github.event.inputs.dry-run || 'false' }}"
-          echo "**Included patterns**: ${{ github.event.inputs.included-patterns || 'sha:*' }}"
           echo "**Debug**: ${{ github.event.inputs.debug || 'false' }}"
       - name: Run Container Package Cleanup Action
         uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@main
@@ -51,7 +50,6 @@ jobs:
           included-tags: ${{ github.event.inputs.included-tags || 'dev*' }}
           excluded-tags: ${{ github.event.inputs.excluded-tags || 'release*' }}
           dry-run: ${{ github.event.inputs.dry-run || 'true' }}
-          included-patterns: ${{ github.event.inputs.included-patterns || 'sha:*' }}
           debug: ${{ github.event.inputs.debug || 'false' }}
         env:
           PACKAGE_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
