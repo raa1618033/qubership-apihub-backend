@@ -1,4 +1,4 @@
-name: Branch Cleanup (On Branch Delete)
+name: my Branch Cleanup
 
 on:
   delete:
