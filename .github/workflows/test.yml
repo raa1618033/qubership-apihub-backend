@@ -9,7 +9,7 @@ env:
   THRESHOLD_DAYS: "0"           
   INCLUDED_TAGS: ""             
   EXCLUDED_TAGS: ""     
-  DRY_RUN: "true"               
+  DRY_RUN: ${{ env.BRANCH_CLEANUP_DRYRUN || 'true' }}               
   DEBUG: "false"
 
 jobs:
