@@ -16,6 +16,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: "Test"
+      - name: Handle branch deletion
+        if: github.event.ref_type == 'branch'
         run: |
-          echo "TEST action on branch delete - ${REF_NAME}"
+          echo "The deleted branch is: ${{ github.event.ref }}"
+
