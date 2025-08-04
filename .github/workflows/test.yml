@@ -4,7 +4,7 @@ on:
     branches:
       - "**"  
 env:
-  REF_NAME: ${{ github.ref }}
+  REF_NAME: ${{ github.event.ref }}
   PREFIX: "timestamp"
   THRESHOLD_DAYS: "0"           
   INCLUDED_TAGS: ""             
@@ -24,3 +24,26 @@ jobs:
         run: |
           echo "The deleted branch is: ${{ github.event.ref }}"
 
+      - name: Prepare Tag
+        id: prepare_tag
+        run: |
+          TAG=$(echo ${REF_NAME} | sed 's@refs/tags/@@;s@refs/heads/@@;s@refs/pull/@pull/@;s@^develop$@dev@;s@^release$@next@;s@/@-@g;')
+          echo "TAG=$TAG"
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Prepare Tags To Delete
+        id: prepare_tags_delete
+        run: |
+          TAGS_TO_DELETE=$(echo "${PREFIX}-*-${TAG}, $INCLUDED_TAGS" | sed 's/, $//)
+          echo "TAGS_TO_DELETE=$TAGS_TO_DELETE"
+          echo "TAGS_TO_DELETE=$TAGS_TO_DELETE" >> $GITHUB_OUTPUT
+
+      - name: "Summary"
+        run: |
+          echo "**Event**: ${{ github.event_name }}"
+          echo "**Actor**: ${{ github.actor }}"
+          echo "**Threshold days**: ${{ $THRESHOLD_DAYS }}"
+          echo "**Included tags**:  ${{ TAGS_TO_DELETE }}"
+          echo "**Excluded tags**: ${{ $EXCLUDED_TAGS }}"
+          echo "**Dry-run**: ${{ $DRY_RUN }}"
+          echo "**Debug**: ${{ $DEBUG }}"
