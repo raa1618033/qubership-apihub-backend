@@ -25,4 +25,5 @@ jobs:
       - name: Summary
         run: |
           echo "**Event**: ${{ github.event_name }}"
+          echo "**Actor**: ${{ github.actor }}"
 
