@@ -64,4 +64,4 @@ jobs:
           excluded-tags: ${{ env.EXCLUDED_TAGS }}
           dry-run: ${{ env.DRY_RUN }}
         env:
-          PACKAGE_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
+          PACKAGE_TOKEN: ${{ secrets.GH_ACCESS_TOKEN  }}
