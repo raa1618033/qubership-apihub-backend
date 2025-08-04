@@ -1,0 +1,13 @@
+name: my test
+on:
+  delete:
+    branches:
+      - "**"  
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Test"
+        run: |
+          echo "TEST action on branch delete"
