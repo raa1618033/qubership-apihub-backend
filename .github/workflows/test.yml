@@ -32,7 +32,7 @@ jobs:
       - name: Prepare Tags To Delete
         id: prepare_tags_delete
         run: |
-          TAGS_TO_DELETE=$(echo "${PREFIX}-*-${TAG}, $INCLUDED_TAGS" | sed 's/, $//)
+          TAGS_TO_DELETE=$(echo "${PREFIX}-*-${TAG}, $INCLUDED_TAGS" | sed 's/, $//')
           echo "TAGS_TO_DELETE=$TAGS_TO_DELETE"
           echo "TAGS_TO_DELETE=$TAGS_TO_DELETE" >> $GITHUB_OUTPUT
       - name: Summary
