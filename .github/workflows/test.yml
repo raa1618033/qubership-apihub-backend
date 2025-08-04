@@ -43,3 +43,4 @@ jobs:
           echo "**Included tags**: ${TAGS_TO_DELETE}"
           echo "**Excluded tags**: ${EXCLUDED_TAGS}"
           echo "**Dry-run**: ${DRY_RUN}"
+
