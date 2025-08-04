@@ -13,11 +13,14 @@ env:
   DEBUG: "false"
 
 jobs:
-  test:
+  HandleBranchDeletion:
+    if: github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
     steps:
-      - name: Handle branch deletion
-        if: github.event.ref_type == 'branch'
+      - name: Checkout
+        uses: actions/checkout@v4
+              
+      - name: Info branch deletion
         run: |
           echo "The deleted branch is: ${{ github.event.ref }}"
 
