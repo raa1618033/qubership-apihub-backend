@@ -3,6 +3,10 @@ on:
   delete:
     branches:
       - "**"  
+permissions:
+  packages: write
+  contents: read
+
 env:
   BRANCH_NAME: ${{ github.event.ref }}
   PREFIX: "timestamp"
