@@ -22,7 +22,7 @@ jobs:
       - name: Info branch deletion
         run: |
           echo "The deleted branch is: ${{ github.event.ref }}"
-      - name: "Summary"
+      - name: Summary
         run: |
           echo "**Event**: ${{ github.event_name }}"
           echo "**Actor**: ${{ github.actor }}"
