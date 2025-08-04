@@ -27,3 +27,6 @@ jobs:
           echo "**Event**: ${{ github.event_name }}"
           echo "**Actor**: ${{ github.actor }}"
           echo "**Threshold days**: ${THRESHOLD_DAYS}"
+          echo "**Included tags**: QWE"
+          echo "**Excluded tags**: ${{ $EXCLUDED_TAGS }}"
+          echo "**Dry-run**: ${{ $DRY_RUN }}"
