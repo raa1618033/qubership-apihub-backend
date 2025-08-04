@@ -19,9 +19,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-              
       - name: Info branch deletion
         run: |
           echo "The deleted branch is: ${{ github.event.ref }}"
-
-
