@@ -28,11 +28,11 @@ jobs:
           TAG=$(echo ${REF_NAME} | sed 's@refs/tags/@@;s@refs/heads/@@;s@refs/pull/@pull/@;s@^develop$@dev@;s@^release$@next@;s@/@-@g;')
           echo "TAG=$TAG"
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-
       - name: Prepare Tags To Delete
         id: prepare_tags_delete
         run: |
           TAGS_TO_DELETE=$(echo "${PREFIX}-*-${TAG}, $INCLUDED_TAGS" | sed 's/, $//')
+          echo "TAG=$TAG"
           echo "TAGS_TO_DELETE=$TAGS_TO_DELETE"
           echo "TAGS_TO_DELETE=$TAGS_TO_DELETE" >> $GITHUB_OUTPUT
       - name: Summary
