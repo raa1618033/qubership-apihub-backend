@@ -20,6 +20,9 @@ jobs:
   HandleBranchDeletion:
     if: github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
