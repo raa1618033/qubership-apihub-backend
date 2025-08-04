@@ -1,46 +1,64 @@
-name: my test
+name: Branch Deletion Cleanup
+run-name: "${{ github.actor }} cleaning up after branch deletion"
 on:
   delete:
     branches:
-      - "**"  
+      - "**"
+
 env:
-  REF_NAME: ${{ github.event.ref }}
-  PREFIX: "timestamp"
-  THRESHOLD_DAYS: "0"           
-  INCLUDED_TAGS: ""             
-  EXCLUDED_TAGS: ""     
-  DRY_RUN: "true"               
-  DEBUG: "false"
+  DEFAULT_THRESHOLD: "0"
+  DEFAULT_INCLUDED: ""
+  DEFAULT_EXCLUDED: ""
+  DEFAULT_DRY_RUN: "true"
+  DEFAULT_DEBUG: "false"
 
 jobs:
   HandleBranchDeletion:
     if: github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Info branch deletion
-        run: |
-          echo "The deleted branch is: ${{ github.event.ref }}"
+
       - name: Prepare Tag
         id: prepare_tag
         run: |
           TAG=$(echo ${REF_NAME} | sed 's@refs/tags/@@;s@refs/heads/@@;s@refs/pull/@pull/@;s@^develop$@dev@;s@^release$@next@;s@/@-@g;')
-          echo "TAG=$TAG"
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-      - name: Prepare Tags To Delete
-        id: prepare_tags_delete
-        run: |
-          TAGS_TO_DELETE=$(echo "${PREFIX}-*-${TAG}, $INCLUDED_TAGS" | sed 's/, $//')
-          echo "TAG=$TAG"
-          echo "TAGS_TO_DELETE=$TAGS_TO_DELETE"
-          echo "TAGS_TO_DELETE=$TAGS_TO_DELETE" >> $GITHUB_OUTPUT
-      - name: Summary
-        run: |
-          echo "**Event**: ${{ github.event_name }}"
-          echo "**Actor**: ${{ github.actor }}"
-          echo "**Threshold days**: ${THRESHOLD_DAYS}"
-          echo "**Included tags**: ${TAGS_TO_DELETE}"
-          echo "**Excluded tags**: ${EXCLUDED_TAGS}"
-          echo "**Dry-run**: ${DRY_RUN}"
 
+      - name: Prepare Tags To Delete
+        id: prepare_tags
+        run: |
+          TAGS_TO_DELETE="${PREFIX}-*-${{ steps.prepare_tag.outputs.TAG }}"
+          if [ -n "$INCLUDED_TAGS" ]; then
+            TAGS_TO_DELETE="${TAGS_TO_DELETE},${INCLUDED_TAGS}"
+          fi
+          echo "TAGS_TO_DELETE=${TAGS_TO_DELETE}" >> $GITHUB_OUTPUT
+
+      - name: Show Summary
+        run: |
+          echo "=== CLEANUP SUMMARY ==="
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Threshold days: ${THRESHOLD_DAYS}"
+          echo "Included tags: ${{ steps.prepare_tags.outputs.TAGS_TO_DELETE }}"
+          echo "Excluded tags: ${EXCLUDED_TAGS}"
+          echo "Dry-run: ${DRY_RUN}"
+          echo "Debug: ${DEBUG}"
+          echo "======================"
+
+      - name: Run Cleanup
+        uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@main
+        with:
+          threshold-days: ${{ env.THRESHOLD_DAYS }}
+          included-tags: ${{ steps.prepare_tags.outputs.TAGS_TO_DELETE }}
+          excluded-tags: ${{ env.EXCLUDED_TAGS }}
+          dry-run: ${{ env.DRY_RUN }}
+          debug: ${{ env.DEBUG }}
+        env:
+          PACKAGE_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
