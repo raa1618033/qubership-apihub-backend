@@ -1,4 +1,4 @@
-name: Branch Deletion Cleanup
+name: my Branch Deletion Cleanup
 run-name: "${{ github.actor }} cleaning up after branch deletion"
 on:
   delete:
