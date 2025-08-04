@@ -24,12 +24,4 @@ jobs:
         run: |
           echo "The deleted branch is: ${{ github.event.ref }}"
 
-      - name: "Summary"
-        run: |
-          echo "**Event**: ${{ github.event_name }}"
-          echo "**Actor**: ${{ github.actor }}"
-          echo "**Threshold days**: ${{ $THRESHOLD_DAYS }}"
-          echo "**Included tags**:  ${{ TAGS_TO_DELETE }}"
-          echo "**Excluded tags**: ${{ $EXCLUDED_TAGS }}"
-          echo "**Dry-run**: ${{ $DRY_RUN }}"
-          echo "**Debug**: ${{ $DEBUG }}"
+
