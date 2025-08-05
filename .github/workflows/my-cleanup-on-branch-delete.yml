@@ -1,4 +1,5 @@
-name: my CleanUP on Branch Delete for ${{ github.event.ref || 'Deleted Branch' }}
+name: my CleanUP on Branch Delete
+run-name: my CleanUP on Branch Delete for ${{ github.event.ref || 'Deleted Branch' }}
 on:
   delete:
     branches:
