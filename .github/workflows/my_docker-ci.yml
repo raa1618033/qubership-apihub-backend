@@ -53,7 +53,7 @@ jobs:
         id: prepare_tag
         run: |
           TAG=$(echo ${REF_NAME} | sed 's@refs/tags/@@;s@refs/heads/@@;s@refs/pull/@pull/@;s@^develop$@dev@;s@^release$@next@;s@/@-@g;')
-          TIMESTAMP=$(date -u +%s)
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           TIMESTAMP_TAG="timestamp-${TIMESTAMP}-${TAG}"
           echo "TAG=$TAG"
           echo "TIMESTAMP_TAG=$TIMESTAMP_TAG"
