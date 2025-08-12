@@ -33,12 +33,13 @@ jobs:
         id: determine_tags
         run: |
           if [ "${{ github.event.ref_type }}" = "branch" ]; then
-            echo "tags_to_delete=timestamp-*-${{ steps.prepare_branch_tag.outputs.branch_tag }}" >> "$GITHUB_OUTPUT"
+            tags_to_delete=timestamp-*-${{ steps.prepare_branch_tag.outputs.branch_tag }}
           fi
           if [ "${{ github.event.ref_type }}" = "tag" ]; then
-            echo "tags_to_delete=${REF_NAME#refs/tags/}" >> "$GITHUB_OUTPUT"
+            tags_to_delete=${REF_NAME#refs/tags/}
           fi
           echo "tags_to_delete=$tags_to_delete"
+          echo "tags_to_delete=$tags_to_delete" >> "$GITHUB_OUTPUT"
 
       - name: Print summary
         run: |
