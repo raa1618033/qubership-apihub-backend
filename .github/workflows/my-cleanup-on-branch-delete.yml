@@ -7,7 +7,7 @@ on:
     tags: ["**"]
 
 env:
-  GITHUB_REF_NAME: ${{ github.event.ref }}
+  BRANCH_NAME: ${{ github.event.ref }}
 
 jobs:
   handle_deletion:
@@ -18,14 +18,14 @@ jobs:
 
       - name: Log deletion info
         run: |
-          echo "Deleted ${{ github.event.ref_type }}: ${GITHUB_REF_NAME}"
+          echo "Deleted ${{ github.event.ref_type }}: ${BRANCH_NAME}"
           echo "Deleted by: ${{ github.actor }}"
 
       - name: Prepare branch tag pattern
         if: github.event.ref_type == 'branch'
         id: prepare_branch_tag
         run: |
-          branch_tag=$(echo "${GITHUB_REF_NAME}" | sed 's@refs/tags/@@;s@refs/heads/@@;s@refs/pull/@pull/@;s@^develop$@dev@;s@^release$@next@;s@/@-@g')
+          branch_tag=$(echo "${BRANCH_NAME}" | sed 's@refs/tags/@@;s@refs/heads/@@;s@refs/pull/@pull/@;s@^develop$@dev@;s@^release$@next@;s@/@-@g')
           echo  "branch_tag=$branch_tag"
           echo  "branch_tag=$branch_tag" >> "$GITHUB_OUTPUT"
 
@@ -36,7 +36,7 @@ jobs:
             echo "tags_to_delete=timestamp-*-${{ steps.prepare_branch_tag.outputs.branch_tag }}" >> "$GITHUB_OUTPUT"
           fi
           if [ "${{ github.event.ref_type }}" = "tag" ]; then
-            echo "tags_to_delete=${GITHUB_REF_NAME#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "tags_to_delete=${BRANCH_NAME#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
           echo "tags_to_delete=$tags_to_delete"
 
@@ -45,7 +45,7 @@ jobs:
           echo "=== Deletion Summary ==="
           echo "Event: ${{ github.event_name }}"
           echo "Ref Type: ${{ github.event.ref_type }}"
-          echo "Deleted Ref: ${GITHUB_REF_NAME}"
+          echo "Deleted Ref: ${BRANCH_NAME}"
           echo "Tags to Delete: ${{ steps.determine_tags.outputs.tags_to_delete }}"
           echo "Actor: ${{ github.actor }}"
           echo "Threshold Days: 0"
