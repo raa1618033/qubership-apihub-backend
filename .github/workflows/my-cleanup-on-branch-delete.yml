@@ -6,12 +6,6 @@ on:
       - "**"  
 env:
   BRANCH_NAME: ${{ github.event.ref }}
-  PREFIX: "timestamp"
-  THRESHOLD_DAYS: "0"           
-  INCLUDED_TAGS: ""             
-  EXCLUDED_TAGS: ""     
-  DRY_RUN: ${{ vars.BRANCH_CLEANUP_DRYRUN || 'true' }}               
-  DEBUG: "false"
 
 jobs:
   HandleBranchDeletion:
@@ -35,7 +29,7 @@ jobs:
       - name: Prepare Tags To Delete
         id: prepare_tags_delete
         run: |
-          TAGS_TO_DELETE="${PREFIX}-*-${{ steps.prepare_tag.outputs.TAG }}"
+          TAGS_TO_DELETE="timestamp-*-${{ steps.prepare_tag.outputs.TAG }}"
           [ -n "$INCLUDED_TAGS" ] && TAGS_TO_DELETE="${TAGS_TO_DELETE},${INCLUDED_TAGS}"
           echo "TAGS_TO_DELETE=${TAGS_TO_DELETE}"
           echo "TAGS_TO_DELETE=${TAGS_TO_DELETE}" >> $GITHUB_OUTPUT
@@ -45,17 +39,17 @@ jobs:
           echo "**Event**: ${{ github.event_name }}"
           echo "**Deleted Branch**: ${BRANCH_NAME}"
           echo "**Actor**: ${{ github.actor }}"
-          echo "**Threshold days**: ${THRESHOLD_DAYS}"
-          echo "**Included tags**: ${{ steps.prepare_tags_delete.outputs.TAGS_TO_DELETE }}"
-          echo "**Excluded tags**: ${EXCLUDED_TAGS}"
-          echo "**Dry-run**: ${DRY_RUN}"
+          echo "**Threshold days**: 0"
+          echo "**Included tags**: none"
+          echo "**Excluded tags**: main,dev,release"
+          echo "**Dry-run**: false"
       
       - name: Run Container Package Cleanup Action
         uses: raa1618033/qubership-workflow-hub/actions/container-package-cleanup@main
         with:
-          threshold-days: ${{ env.THRESHOLD_DAYS }}
-          included-tags: ${{ steps.prepare_tags_delete.outputs.TAGS_TO_DELETE }}
-          excluded-tags: ${{ env.EXCLUDED_TAGS }}
-          dry-run: ${{ env.DRY_RUN }}
+          threshold-days: "0"
+          included-tags: ""
+          excluded-tags: "main,dev,release"
+          dry-run: "false"
         env:
           PACKAGE_TOKEN: ${{ secrets.GH_ACCESS_TOKEN  }}
