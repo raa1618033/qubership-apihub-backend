@@ -13,7 +13,7 @@ on:
 
 jobs:
   build-docker-image:
-    uses: raa1618033/qubership-apihub-backend/.github/workflows/my_docker-ci.yml@develop
+    uses: raa1618033/qubership-apihub-ci/.github/workflows/docker-ci.yml@cleanup
     with:
         name: qubership-apihub-backend
         file: Dockerfile
