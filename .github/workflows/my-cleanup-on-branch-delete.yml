@@ -50,7 +50,7 @@ jobs:
           echo "Tags to Delete: ${{ steps.determine_tags.outputs.tags_to_delete }}"
           echo "Actor: ${{ github.actor }}"
           echo "Threshold Days: 0"
-          echo "Excluded Tags: main,dev,release"
+          echo "Excluded Tags: dev"
           echo "Dry Run: false"
 
       - name: Execute package cleanup
