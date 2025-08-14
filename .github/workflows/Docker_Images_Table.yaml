@@ -1,0 +1,144 @@
+name: Docker Images Table Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      ghcr_org:
+        description: 'GitHub Organization name'
+        required: false
+        default: 'Netcracker'
+        type: string
+      repo_name:
+        description: 'Repository name in GHCR'
+        required: false
+        default: 'qubership-apihub-backend'
+        type: string
+
+jobs:
+  report-ghcr-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install PyGithub requests
+
+    - name: Generate complete GHCR report
+      env:
+        GHCR_ORG: ${{ inputs.ghcr_org || 'Netcracker' }}
+        REPO_NAME: ${{ inputs.repo_name || 'qubership-apihub-backend' }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        cat << 'PYTHON_SCRIPT' > ghcr_report.py
+        import os
+        import requests
+        from datetime import datetime
+        from urllib.parse import quote
+        from collections import defaultdict
+    
+        org = os.getenv('GHCR_ORG')
+        repo_name = os.getenv('REPO_NAME')
+        gh_token = os.getenv('GITHUB_TOKEN')
+        output_file = 'GHCR_COMPLETE_REPORT.md'
+        api_url = "https://api.github.com"
+    
+        def get_all_versions():
+            headers = {
+                "Authorization": f"Bearer {gh_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            package_name = quote(repo_name.lower())
+            url = f"{api_url}/orgs/{org}/packages/container/{package_name}/versions?per_page=100"
+            
+            all_versions = []
+            page = 1
+            while True:
+                response = requests.get(f"{url}&page={page}", headers=headers)
+                response.raise_for_status()
+                versions = response.json()
+                if not versions:
+                    break
+                    
+                all_versions.extend(versions)
+                print(f"Fetched page {page} with {len(versions)} items")
+                
+                page += 1
+                if len(versions) < 100:
+                    break
+                    
+            return all_versions
+    
+        versions = get_all_versions()
+        tagged_versions = defaultdict(list)
+        untagged_versions = []
+    
+        for version in versions:
+            tags = version.get('metadata', {}).get('container', {}).get('tags', [])
+            size_bytes = version.get('size_in_bytes', 0)
+            size_mb = round(size_bytes / (1024**2), 2)
+            version_data = {
+                'created': version.get('created_at', 'Unknown'),
+                'digest': version.get('name', '')[:12],
+                'size': f"{size_mb} MB",
+                'full_digest': version.get('name', '')
+            }
+            
+            if tags:
+                for tag in tags:
+                    tagged_versions[tag].append(version_data)
+            else:
+                untagged_versions.append(version_data)
+    
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"# Complete GHCR Images Report for {org}/{repo_name}\n\n")
+            f.write(f"Generated at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+            f.write(f"Total versions: {len(versions)}\n")
+            f.write(f"Tagged versions: {sum(len(v) for v in tagged_versions.values())} (in {len(tagged_versions)} tags)\n")
+            f.write(f"Untagged versions: {len(untagged_versions)}\n\n")
+            
+            # Tagged images section
+            f.write("## Tagged Images\n\n")
+            for tag, images in sorted(tagged_versions.items()):
+                f.write(f"### Tag: {tag} ({len(images)} versions)\n\n")
+                f.write("| Created | Digest | Size | Full Digest |\n")
+                f.write("|---------|--------|------|-------------|\n")
+                for img in sorted(images, key=lambda x: x['created'], reverse=True):
+                    f.write(f"| {img['created']} | `{img['digest']}` | {img['size']} | `{img['full_digest']}` |\n")
+                f.write("\n")
+            
+            if untagged_versions:
+                f.write("## Untagged Images\n\n")
+                f.write("| Created | Digest | Size | Full Digest |\n")
+                f.write("|---------|--------|------|-------------|\n")
+                for img in sorted(untagged_versions, key=lambda x: x['created'], reverse=True):
+                    f.write(f"| {img['created']} | `{img['digest']}` | {img['size']} | `{img['full_digest']}` |\n")
+    
+        print(f"Report generated with {len(versions)} total versions")
+        PYTHON_SCRIPT
+    
+        python ghcr_report.py
+        cat GHCR_COMPLETE_REPORT.md
+
+    - name: Show report summary
+      run: |
+        echo "Report summary:"
+        grep -A 5 "^## Tag:" GHCR_FULL_REPORT.md | head -20
+        echo "..."
+        echo "Full report saved as artifact"
+
+    - name: Upload full report
+      uses: actions/upload-artifact@v4
+      with:
+        name: ghcr-full-report
+        path: GHCR_FULL_REPORT.md

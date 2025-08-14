@@ -26,4 +26,4 @@ Just run build.cmd(sh) file from this repository
 
 [Development tools setup](./docs/newcomer_env_setup.md)
 
-test 3
+test 4

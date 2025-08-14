@@ -1,0 +1,53 @@
+name: Docker images by tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: 'GitHub owner/organization'
+        required: true
+        default: 'Netcracker'
+      repo:
+        description: 'GitHub repository name'
+        required: true
+        default: 'qubership-apihub-backend'
+      tag:
+        description: 'Docker image tag to search for'
+        required: true
+
+jobs:
+  get-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      
+    steps:
+      - name: Setup Docker and authenticate
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+      - name: Get image metadata
+        env:
+          OWNER: "${{ inputs.owner }}"
+          REPO: "${{ inputs.repo }}"
+          TAG: "${{ inputs.tag }}"
+        run: |
+          if ! docker manifest inspect ghcr.io/$OWNER/$REPO:$TAG > /dev/null 2>&1; then
+            echo "::error::Image ghcr.io/$OWNER/$REPO:$TAG not found!"
+            echo "Available tags:"
+            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://ghcr.io/v2/$OWNER/$REPO/tags/list" | jq -r '.tags[]?' || echo "None"
+            exit 1
+          fi
+          
+          echo "Image details:"
+          docker inspect ghcr.io/$OWNER/$REPO:$TAG | jq '.[] | {RepoTags, Created, Labels}'
+          
+          echo "IMAGE_NAME=ghcr.io/$OWNER/$REPO:$TAG" >> $GITHUB_ENV
+          echo "IMAGE_DIGEST=$(docker inspect --format='{{.RepoDigests}}' ghcr.io/$OWNER/$REPO:$TAG)" >> $GITHUB_ENV
+          
+      - name: Output results
+        run: |
+          echo "✅ Found image: $IMAGE_NAME"
+          echo "🔍 Digest: $IMAGE_DIGEST"
